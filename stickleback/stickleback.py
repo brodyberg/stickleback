@@ -24,9 +24,21 @@ def _diff_from(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
     return np.array([np.min(np.abs(x - ys)) for x in xs])
 
 class Stickleback:
+    """Identify point behaviors in longitudinal sensor data.
+    """
 
     def __init__(self, sensors: pd.DataFrame, events: pd.DatetimeIndex, win_size: int, seed: int = None, 
                  proba_thr: float = 0.5, min_period: int = 1):
+        """Instantiate a Stickleback object 
+
+        Args:
+            sensors (pd.DataFrame): Longitudinal sensor data, e.g. depth, pitch, and jerk.
+            events (pd.DatetimeIndex): Times of point behavior events.
+            win_size (int): Size of sliding window (in records).
+            seed (int, optional): Random number generator seed. Defaults to None.
+            proba_thr (float, optional): Probability threshold for classifying events. Defaults to 0.5.
+            min_period (int, optional): Minimum period between events (in records). Defaults to 1.
+        """
         self.sensors = sensors
         self.events = events
         self.win_size = win_size
@@ -58,6 +70,11 @@ class Stickleback:
         self.outcomes = pd.Series(dtype="string")
 
     def sample_nonevents(self, n: int = None) -> None:
+        """Sample non-events for model training.
+
+        Args:
+            n (int, optional): Number of non-events to sample. If None (default), samples an equal number of non-events as events.
+        """
         if n is None:
             n = len(self.events)
 
@@ -74,17 +91,16 @@ class Stickleback:
         self.nonevents_sampled = True
     
     def _extract_nested(self, idx: np.ndarray) -> pd.DataFrame:
+        """Extract windows of data in nested sktime DataFrame format
+
+        Args:
+            idx (np.ndarray): Indices of window centers.
+
+        Returns:
+            pd.DataFrame: Extracted windows in nested sktime DataFrame format.
         """
-        Extract samples from longitudinal sensor data and reformat into nested sktime DataFrame format
-        
-            Parameters:
-                data: longitudinal sensor data
-                idx: indices of sample centers
-                window_size: number of records in each sample window
-            
-            Returns:
-                Sample windows in nested sktime DataFrame format
-        """
+
+        # TODO implement assert_shape and assert_dtype. See: https://medium.com/@nearlydaniel/assertion-of-arbitrary-array-shapes-in-python-3c96f6b7ccb4
         # assert_shape(idx, [None])
         # assert_dtype(idx, np.integer)
         assert idx.min() >= int(self.win_size / 2), "idx out of bounds"
@@ -105,6 +121,8 @@ class Stickleback:
         return nested
 
     def extract_training_data(self):
+        """Extract training data from longitudinal sensor data
+        """
         assert self.nonevents_sampled, "Can't extract training data until nonevents sampled"
         nested_events = self._extract_nested(self.event_idx)
         nested_nonevents = self._extract_nested(self.nonevent_idx)
@@ -113,36 +131,43 @@ class Stickleback:
         self.train_extracted = True
 
     def fit(self):
+        """Fit classifier to training data
+        """
+        assert self.train_extracted, "Can't fit until training data extracted"
         self.clf.fit(self.clf_data, self.clf_labels)
 
     def predict_self(self, nth: int = 1, mask: np.ndarray = None):
+        """Predict in-sample events
+
+        Args:
+            nth (int, optional): Predict every nth window and interpolate probabilities in between. Defaults to 1.
+            mask (np.ndarray, optional): Indicies to predict (i.e., for subsetting). Defaults to None.
+        """
         idx = np.array(range(int(self.win_size / 2), len(self.sensors) - int(self.win_size / 2), nth))
         if mask is not None:
             assert issubclass(mask.dtype.type, np.integer), "mask must be integers"
             idx = np.intersect1d(idx, mask)
         all_nested = self._extract_nested(idx)
         event_proba = self.clf.predict_proba(all_nested)[:, 0]
-        self.event_proba = pd.Series(event_proba, name="event_proba", index=all_nested.index)
-        proba_peaks = find_peaks(event_proba, height=self.proba_thr, distance=self.min_period)
+        self.event_proba = pd.Series(event_proba, name="event_proba", index=all_nested.index) \
+                             .reindex(self.sensors.index) \
+                             .interpolate(method="cubic")
+        proba_peaks = find_peaks(self.event_proba, height=self.proba_thr, distance=self.min_period)
         # TODO handle no peaks case
-        self.pred_events = all_nested.index[proba_peaks[0]]
+        self.pred_events = self.sensors.index[proba_peaks[0]]
         self.pred_event_idx = np.array([self.sensors.index.get_loc(p) for p in self.pred_events])
         self.predicted = True
         
     def assess(self, tol: int = 1):
-        """
-        Assess prediction accuracy
+        """Assess prediction accuracy
         
         The closest predicted event to each actual event (within tolerance) is considered a true positive. Predicted 
         events that are not the closest prediction to an actual event (or farther than tolerance) are considered false
         positives. Actual events with no predicted event within the tolerance are considered false negatives.
-        
-            Parameters:
-                predicted: datetimes of predicted events
-                actual: datetimes of actual events
-                data: longitudinal sensor data
-                window_size: number of records per window
-        """
+
+        Args:
+            tol (int, optional): Tolerance for linking predicted and actual events (in records). Defaults to 1.
+        """    
         assert self.predicted, "Cannot assess until after prediction"
 
         # Find closest predicted to each actual and their distance
@@ -178,6 +203,10 @@ class Stickleback:
         self.assessed = True
 
     def refit(self):
+        """Refit model
+
+        Adds false positives to training dataset and re-fits classifer.
+        """
         assert self.assessed, "Cannot refit until after assessment"
 
         false_pos_idx = np.array([self.sensors.index.get_loc(i) for i in self.outcomes.index[self.outcomes == "FP"]])
@@ -192,6 +221,11 @@ class Stickleback:
         self.assessed = False
     
     def plot_sensors_events(self) -> Figure:
+        """Plot longitudinal sensor data and events
+
+        Returns:
+            Figure: a plotly figure with sensor data in subplots and events marked with points.
+        """
         event_sensors = self.sensors \
                             .append(pd.DataFrame(index=self.events)) \
                             .interpolate("index") \
@@ -218,6 +252,11 @@ class Stickleback:
         fig.show()
 
     def plot_predictions(self) -> Figure:
+        """Plot model predictions
+
+        Returns:
+            Figure: a plotly figure with sensor data and predictions probabilities in subplots. Open markers indicate actual events, blue points indicate true positive predictions, and red points indicated false positives.
+        """
         assert self.assessed, "Cannot plot predictions until predictions have been assessed"
         # Plot sensor data and predictions
         data = self.sensors.join(self.event_proba).join(self.outcomes)
@@ -225,6 +264,7 @@ class Stickleback:
                             shared_xaxes=True,)
         predicted_only = data.iloc[self.pred_event_idx]
         actual_only = data.iloc[self.event_idx]
+        data.drop("outcome", axis="columns", inplace=True)
 
         for i, col in enumerate(data):
             # Line plot
@@ -247,7 +287,7 @@ class Stickleback:
                 mode="markers",
                 marker_symbol="circle-open",
                 marker_size=10,
-                marker_color="purple",
+                marker_color=["red" if o == "FN" else "blue" for o in actual_only["outcome"]],
             ), row=i + 1, col=1)
             if col == "depth":
                 fig.update_yaxes(autorange="reversed", row=i + 1, col=1)
