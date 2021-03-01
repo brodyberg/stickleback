@@ -143,6 +143,8 @@ class Stickleback:
                 data: longitudinal sensor data
                 window_size: number of records per window
         """
+        assert self.predicted, "Cannot assess until after prediction"
+
         # Find closest predicted to each actual and their distance
         # TODO handle no predicted events case
         closest = np.array([np.argmin(np.abs(self.pred_event_idx - a)) for a in self.event_idx])
@@ -174,6 +176,20 @@ class Stickleback:
         # assert (n_tp + n_fn) == len(self.events), "TP + FN != count of actual events"
         
         self.assessed = True
+
+    def refit(self):
+        assert self.assessed, "Cannot refit until after assessment"
+
+        false_pos_idx = np.array([self.sensors.index.get_loc(i) for i in self.outcomes.index[self.outcomes == "FP"]])
+        if len(false_pos_idx) == 0:
+            return
+        
+        self.clf_data = pd.concat([self.clf_data, self._extract_nested(false_pos_idx)])
+        self.clf_labels = self.clf_labels + ["nonevent"] * len(false_pos_idx)
+        self.fit()
+
+        self.predicted = False
+        self.assessed = False
     
     def plot_sensors_events(self) -> Figure:
         event_sensors = self.sensors \
