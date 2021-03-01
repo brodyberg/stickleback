@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.graph_objs._figure import Figure
 from plotly.subplots import make_subplots
+from sktime.utils.data_processing import from_3d_numpy_to_nested
 
 # Utility functions
 def _diff_from(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
@@ -26,7 +27,15 @@ class Stickleback:
         self.win_size = win_size
         self.rg = np.random.Generator(np.random.PCG64(seed))
 
+        # Workflow flags
+        self.nonevents_sampled = False
+        self.train_extracted = False
+
         self.event_idx = np.array([sensors.index.get_loc(e, method="nearest") for e in events])
+        self.nonevent_idx = np.zeros(len(self.event_idx), int)
+
+        self.clf_data = pd.DataFrame()
+        self.clf_labels = []
 
     def sample_nonevents(self, n: int = None) -> None:
         if n is None:
@@ -42,6 +51,46 @@ class Stickleback:
         nonevent_idx.sort()
 
         self.nonevent_idx = nonevent_idx
+        self.nonevents_sampled = True
+    
+    def _extract_nested(self, idx: np.ndarray) -> pd.DataFrame:
+        """
+        Extract samples from longitudinal sensor data and reformat into nested sktime DataFrame format
+        
+            Parameters:
+                data: longitudinal sensor data
+                idx: indices of sample centers
+                window_size: number of records in each sample window
+            
+            Returns:
+                Sample windows in nested sktime DataFrame format
+        """
+        # assert_shape(idx, [None])
+        # assert_dtype(idx, np.integer)
+        assert idx.min() >= int(self.win_size / 2), "idx out of bounds"
+        assert idx.max() < len(self.sensors) - int(self.win_size / 2), "idx out of bounds"
+        
+        # Create a 3d numpy array of window data
+        data_3d = np.empty([len(idx), len(self.sensors.columns), self.win_size], float)
+        data_arr = self.sensors.to_numpy().transpose()
+        start_idx = idx - int(self.win_size / 2)
+        for i, start in enumerate(start_idx):
+            data_3d[i] = data_arr[:, start:(start + self.win_size)]
+
+        # Convert 3d numpy array to nested sktime DataFrame format
+        nested = from_3d_numpy_to_nested(data_3d)
+        nested.columns = self.sensors.columns
+        nested.index = self.sensors.index[idx]
+        
+        return nested
+
+    def extract_training_data(self):
+        assert self.nonevents_sampled, "Can't extract training data until nonevents sampled"
+        nested_events = self._extract_nested(self.event_idx)
+        nested_nonevents = self._extract_nested(self.nonevent_idx)
+        self.clf_data = pd.concat([nested_events, nested_nonevents])
+        self.clf_labels = ["event"] * len(nested_events) + ["nonevent"] * len(nested_nonevents)
+        self.train_extracted = True
     
     def plot_sensors_events(self) -> Figure:
         event_sensors = self.sensors \
