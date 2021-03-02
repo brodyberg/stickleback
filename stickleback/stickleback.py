@@ -305,19 +305,19 @@ class Stickleback:
             ), row=i + 1, col=1)
             # Predicted events
             fig.append_trace(go.Scatter(
-                x=predicted_only.index,
-                y=predicted_only[col],
-                marker_color=["blue" if o == "TP" else "red" for o in predicted_only["outcome"]],
+                x=predicted.index,
+                y=predicted[col],
+                marker_color=["blue" if o == "TP" else "red" for o in predicted["outcome"]],
                 mode="markers"
             ), row=i + 1, col=1)
             # Actual events
             fig.append_trace(go.Scatter(
-                x=actual_only.index,
-                y=actual_only[col],
+                x=actual.index,
+                y=actual[col],
                 mode="markers",
                 marker_symbol="circle-open",
                 marker_size=10,
-                marker_color=["red" if o == "FN" else "blue" for o in actual_only["outcome"]],
+                marker_color=["red" if o == "FN" else "blue" for o in actual["outcome"]],
             ), row=i + 1, col=1)
             if col == "depth":
                 fig.update_yaxes(autorange="reversed", row=i + 1, col=1)
