@@ -1,11 +1,14 @@
+from matplotlib.figure import Figure as matplotlibFigure
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.graph_objs._figure import Figure
+from plotly.graph_objs._figure import Figure as plotlyFigure
 from plotly.subplots import make_subplots
 from scipy.signal import find_peaks
 from sktime.classification.compose import TimeSeriesForestClassifier, ColumnEnsembleClassifier
 from sktime.utils.data_processing import from_3d_numpy_to_nested
+from typing import Union
 
 from ipdb import set_trace
 
@@ -220,7 +223,7 @@ class Stickleback:
         self.predicted = False
         self.assessed = False
     
-    def plot_sensors_events(self) -> Figure:
+    def plot_sensors_events(self, interactive=False) -> Union[plotlyFigure, matplotlibFigure]:
         """Plot longitudinal sensor data and events
 
         Returns:
@@ -230,7 +233,13 @@ class Stickleback:
                             .append(pd.DataFrame(index=self.events)) \
                             .interpolate("index") \
                             .loc[self.events]
+        
+        if interactive:
+            return self.__plot_sensors_events_interactive(event_sensors)
+        else:
+            return self.__plot_sensors_events_static(event_sensors)
 
+    def __plot_sensors_events_interactive(self, event_sensors) -> plotlyFigure:
         fig = make_subplots(rows=len(self.sensors.columns), cols=1,
                             shared_xaxes=True,)
         for i, col in enumerate(self.sensors.columns):
@@ -249,22 +258,43 @@ class Stickleback:
             fig.update_yaxes(title_text=col, row=i + 1, col=1)
             
         fig.update_layout(showlegend=False)
-        fig.show()
+        return fig
 
-    def plot_predictions(self) -> Figure:
+    def __plot_sensors_events_static(self, event_sensors) -> matplotlibFigure:
+        fig, axs = plt.subplots(len(self.sensors.columns), 1)
+        for i, col in enumerate(self.sensors.columns):
+            # sensor data
+            axs[i].plot(self.sensors.index, self.sensors[col], "-", zorder=1)
+            # events
+            axs[i].scatter(event_sensors.index, event_sensors[col], facecolors="none", edgecolors="r", zorder=2)
+            axs[i].set_ylabel(col)
+            if col == "depth":
+                axs[i].invert_yaxis()
+            
+        return fig
+
+    def plot_predictions(self, interactive=True) -> Union[plotlyFigure, matplotlibFigure]:
         """Plot model predictions
 
         Returns:
             Figure: a plotly figure with sensor data and predictions probabilities in subplots. Open markers indicate actual events, blue points indicate true positive predictions, and red points indicated false positives.
         """
         assert self.assessed, "Cannot plot predictions until predictions have been assessed"
-        # Plot sensor data and predictions
+
+        # Join sensor data with predictions
         data = self.sensors.join(self.event_proba).join(self.outcomes)
-        fig = make_subplots(rows=len(data.columns), cols=1,
-                            shared_xaxes=True,)
         predicted_only = data.iloc[self.pred_event_idx]
         actual_only = data.iloc[self.event_idx]
         data.drop("outcome", axis="columns", inplace=True)
+
+        if interactive:
+            return self.__plot_predictions_interactive(data, predicted_only, actual_only)
+        else:
+            return self.__plot_predictions_static(data, predicted_only, actual_only)
+
+    def __plot_predictions_interactive(self, data, predicted, actual) -> plotlyFigure:
+        fig = make_subplots(rows=len(data.columns), cols=1,
+                            shared_xaxes=True,)
 
         for i, col in enumerate(data):
             # Line plot
@@ -294,4 +324,25 @@ class Stickleback:
             fig.update_yaxes(title_text=col, row=i + 1, col=1)
             
         fig.update_layout(showlegend=False)
+        return fig
+
+    def __plot_predictions_static(self, data, predicted, actual) -> matplotlibFigure:
+        fig, axs = plt.subplots(len(data.columns), 1)
+        for i, col in enumerate(data):
+            # sensor data
+            axs[i].plot(data.index, data[col], "-", zorder=1)
+            axs[i].set_ylabel(col)
+            # predicted events
+            axs[i].scatter(predicted.index, 
+                           predicted[col], 
+                           c=["blue" if o == "TP" else "red" for o in predicted["outcome"]], zorder=2)
+            # actual events
+            axs[i].scatter(actual.index, 
+                           actual[col], 
+                           edgecolors=["blue" if o == "TP" else "red" for o in actual["outcome"]],
+                           facecolors="none",
+                           zorder=3)
+            if col == "depth":
+                axs[i].invert_yaxis()
+            
         return fig
