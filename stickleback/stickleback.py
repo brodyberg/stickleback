@@ -31,7 +31,7 @@ class Stickleback:
     """
 
     def __init__(self, sensors: pd.DataFrame, events: pd.DatetimeIndex, win_size: int, seed: int = None, 
-                 proba_thr: float = 0.5, min_period: int = 1):
+                 min_period: int = 1, proba_thr: float = 0.5, proba_prom: float = 0.25):
         """Instantiate a Stickleback object 
 
         Args:
@@ -39,8 +39,9 @@ class Stickleback:
             events (pd.DatetimeIndex): Times of point behavior events.
             win_size (int): Size of sliding window (in records).
             seed (int, optional): Random number generator seed. Defaults to None.
-            proba_thr (float, optional): Probability threshold for classifying events. Defaults to 0.5.
             min_period (int, optional): Minimum period between events (in records). Defaults to 1.
+            proba_thr (float, optional): Probability threshold for classifying events. Defaults to 0.5.
+            proba_prom (float, optional): Prominence of probability peak for classifying events. Defaults to 0.25.
         """
         self.sensors = sensors
         self.events = events
@@ -65,8 +66,9 @@ class Stickleback:
         )
 
         # Predictions
-        self.proba_thr = proba_thr
         self.min_period = min_period
+        self.proba_thr = proba_thr
+        self.proba_prom = proba_prom
         self.event_proba = pd.Series(dtype=float)
         self.pred_events = pd.DatetimeIndex
         self.pred_event_idx = np.zeros([], dtype=int)
@@ -155,7 +157,7 @@ class Stickleback:
         self.event_proba = pd.Series(event_proba, name="event_proba", index=all_nested.index) \
                              .reindex(self.sensors.index) \
                              .interpolate(method="cubic")
-        proba_peaks = find_peaks(self.event_proba, height=self.proba_thr, distance=self.min_period)
+        proba_peaks = find_peaks(self.event_proba, height=self.proba_thr, distance=self.min_period, prominence=self.proba_prom)
         # TODO handle no peaks case
         self.pred_events = self.sensors.index[proba_peaks[0]]
         self.pred_event_idx = np.array([self.sensors.index.get_loc(p) for p in self.pred_events])
@@ -273,7 +275,7 @@ class Stickleback:
             
         return fig
 
-    def plot_predictions(self, interactive=True) -> Union[plotlyFigure, matplotlibFigure]:
+    def plot_predictions(self, interactive=False) -> Union[plotlyFigure, matplotlibFigure]:
         """Plot model predictions
 
         Returns:
