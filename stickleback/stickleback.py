@@ -251,6 +251,28 @@ class Stickleback:
         self.clf_data = pd.concat([self.clf_data, self._extract_nested(new_data_idx)])
         self.clf_labels = self.clf_labels + new_labels
         self.fit()
+
+    def loo(self, nth: int, tol: pd.Timedelta):
+        loo_pred = dict()
+        for deployid in self.events.unique(0):
+            loo_sensors = self.sensors.loc[self.sensors.index.get_level_values(0) != deployid]
+            loo_sb = Stickleback(
+                sensors=self.sensors.loc[self.sensors.index.get_level_values(0) != deployid],
+                events=self.events[self.events.get_level_values(0) != deployid],
+                win_size=self.win_size, min_period=self.min_period,
+                proba_thr=self.proba_thr, proba_prom=self.proba_prom
+            )
+            loo_sb.sample_nonevents()
+            loo_sb.extract_training_data()
+            loo_sb.fit()
+            loo_proba, loo_idx = loo_sb.predict_self(nth)
+            loo_outcomes = loo_sb.assess(loo_idx, tol)
+            loo_fp = loo_outcomes[loo_outcomes == "FP"].index
+            loo_sb.refit(loo_fp, [Stickleback.nonevent] * len(loo_fp))
+            loo_proba2, loo_idx2 = loo_sb.predict_self(nth)
+            loo_outcomes2 = loo_sb.assess(loo_idx2, tol)
+            loo_pred[deployid] = loo_outcomes2
+        return loo_pred
     
     def plot_sensors_events(self, deployid, interactive=False) -> Union[plotlyFigure, matplotlibFigure]:
         """Plot longitudinal sensor data and events
