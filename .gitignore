@@ -1,2 +1,8 @@
 data/all_breaths.pkl
 data/covered_prh.pkl
+.DS_Store
+.vscode/*
+*.ipynb_checkpoints*
+stickleback.egg-info*
+stickleback/__pycache__*
+
