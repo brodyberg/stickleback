@@ -37,7 +37,7 @@ class ExtractTestCase(unittest.TestCase):
         # Keys and index
         self.assertEqual(result.keys(), sensors.keys())
         self.assertIsInstance(result["d1"].index, pd.DatetimeIndex)
-        assert_array_equal(result["d1"].index, idx1[1:-1])
+        assert_index_equal(result["d1"].index, idx1[1:-1])
 
     def test_extract_nested(self):
         idx = {"d1": idx1[[2, 4]], "d2": idx2[[3, 5]]}
