@@ -1,5 +1,5 @@
 import pandas as pd
-from pandas.util.testing import assert_frame_equal
+from pandas.testing import assert_frame_equal, assert_index_equal
 import numpy as np
 from numpy.testing import assert_array_equal
 import unittest
@@ -30,27 +30,26 @@ class ExtractTestCase(unittest.TestCase):
         result = extract_all(sensors, nth=1, win_size=winsz)
 
         # Size and contents
-        self.assertEqual(len(result), n * 2 - winsz - 1)
-        self.assertEqual(len(result.iloc[0, 0]), winsz)
-        assert_array_equal(result.iloc[-1, -1], -np.arange(n - winsz, n) ** 2)
+        self.assertEqual(len(result["d1"]), n - winsz + 1)
+        self.assertEqual(len(result["d1"].iloc[0, 0]), winsz)
+        assert_array_equal(result["d2"].iloc[-1, -1], -np.arange(n - winsz, n) ** 2)
 
-        # Index
-        self.assertIsInstance(result.index, pd.MultiIndex)
-        self.assertEqual(result.index.nlevels, 2)
-        self.assertEqual(set(result.index.get_level_values(0)), set(sensors.keys()))
-        assert_array_equal(result.loc["d1"].index, idx1[1:-1])
+        # Keys and index
+        self.assertEqual(result.keys(), sensors.keys())
+        self.assertIsInstance(result["d1"].index, pd.DatetimeIndex)
+        assert_array_equal(result["d1"].index, idx1[1:-1])
 
     def test_extract_nested(self):
         idx = {"d1": idx1[[2, 4]], "d2": idx2[[3, 5]]}
         result = extract_nested(sensors, idx, win_size=3)
 
-        self.assertEqual(len(result), 4)
-        result_idx = pd.MultiIndex.from_tuples([(d, i) for d in idx for i in idx[d]])
-        assert_array_equal(result.index, result_idx)
+        for i in idx:
+            assert_index_equal(result[i].index, idx[i])
 
     def test_sample_nonevents(self):
         result1 = sample_nonevents(sensors, events, win_size=3, seed=0x1234)
         result2 = sample_nonevents(sensors, events, win_size=3, seed=0x1234)
 
-        assert_frame_equal(result1, result2)
-        #TODO assert nonevent windows don't overlap event windows
+        for r in result1:
+            assert_frame_equal(result1[r], result2[r])
+        # TODO assert nonevent windows don't overlap event windows
