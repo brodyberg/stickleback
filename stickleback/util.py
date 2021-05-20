@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from pandas.core.frame import DataFrame
+from scipy.signal import find_peaks
 from sktime.utils.data_processing import from_3d_numpy_to_nested
 from typing import Dict, Tuple
 
@@ -44,3 +44,9 @@ def sample_nonevents(sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.Date
 
     idx = {d: _sample(sensors[d], events[d]) for d in sensors}
     return extract_nested(sensors, idx, win_size)
+
+def extract_peaks(local_proba: Dict[str, pd.Series]) -> Dict[str, pd.DataFrame]:
+    def _extract_peaks(x: pd.Series) -> pd.DataFrame:
+        peak_idxs, peak_props = find_peaks(x.fillna(0), height=0.25, prominence=0.01, width=1, rel_height=0.5)
+        return pd.DataFrame(peak_props, index=x.index[peak_idxs])[["peak_heights", "prominences", "widths"]]
+    return {d: _extract_peaks(p) for d, p in local_proba.items()}
