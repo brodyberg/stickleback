@@ -36,7 +36,8 @@ class Stickleback:
 
         # Boost
         global_pred = self._predict_global(local_proba)
-        outcomes = self.assess(global_pred, events)
+        predictions = {d: (local_proba[d], global_pred[d]) for d in global_pred}
+        outcomes = self.assess(predictions, events)
         boosted_X, boosted_y = self._boost(local_X, local_y, sensors, outcomes)
         self._fit_local(boosted_X, boosted_y)
         local_proba2 = self._predict_local(sensors)
@@ -76,7 +77,7 @@ class Stickleback:
                     outcomes[p] = "FP" 
 
             return outcomes
-        predicted_times = {deployid: p[1].index[p[1]["is_event"] == 1] for deployid, p in predicted.items()}
+        predicted_times = {d: gbl.index[gbl["is_event"] == 1] for d, (_, gbl) in predicted.items()}
         return {deployid: _assess(predicted_times[deployid], events[deployid]) for deployid in predicted}
 
     def _fit_local(self, local_X: pd.DataFrame, local_y: np.ndarray) -> None:
