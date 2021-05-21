@@ -50,3 +50,12 @@ def extract_peaks(local_proba: Dict[str, pd.Series]) -> Dict[str, pd.DataFrame]:
         peak_idxs, peak_props = find_peaks(x.fillna(0), height=0.25, prominence=0.01, width=1, rel_height=0.5)
         return pd.DataFrame(peak_props, index=x.index[peak_idxs])[["peak_heights", "prominences", "widths"]]
     return {d: _extract_peaks(p) for d, p in local_proba.items()}
+
+def align_events(events: Dict[str, pd.DatetimeIndex], sensors: Dict[str, pd.DataFrame]) -> Dict[str, pd.DatetimeIndex]:
+    return {d: sensors[d].index[sensors[d].index.searchsorted(e)] 
+            for d, e in events.items()}
+
+def split_dict(dict: dict, keys: set) -> Tuple[dict, dict]:
+    dict1 = {k: v for k, v in dict.items() if k in keys}
+    dict2 = {k: v for k, v in dict.items() if k not in keys}
+    return dict1, dict2
