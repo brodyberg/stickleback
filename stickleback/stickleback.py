@@ -3,8 +3,6 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Tuple
 
-from ipdb import set_trace
-
 class Stickleback:
     event = "event"
     nonevent = "nonevent"
