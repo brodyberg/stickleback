@@ -45,10 +45,28 @@ def sample_nonevents(sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.Date
     idx = {d: _sample(sensors[d], events[d]) for d in sensors}
     return extract_nested(sensors, idx, win_size)
 
+def _find_neighbors(peaks: pd.DataFrame) -> pd.DataFrame:
+    neighbors = np.zeros(len(p))
+    for i in range(len(peaks.index)):
+        pi = peaks.index[i]
+        is_greater = peaks["peak_heights"] >= peaks["peak_heights"][pi]
+        distances = np.asarray(np.abs(pi - peaks.index[is_greater]))
+        if len(distances) == 1:
+            neighbors[i] = -1
+        else:
+            distances.sort()
+            # distances[0] is always 0 (itself), so distances[1] is the nearest neighbor
+            neighbors[i] = distances[1]
+    neighbors[neighbors == -1] = neighbors.max()
+    peaks["neighbors"] = neighbors
+    return peaks
+
 def extract_peaks(local_proba: Dict[str, pd.Series]) -> Dict[str, pd.DataFrame]:
     def _extract_peaks(x: pd.Series) -> pd.DataFrame:
         peak_idxs, peak_props = find_peaks(x.fillna(0), height=0.25, prominence=0.01, width=1, rel_height=0.5)
-        return pd.DataFrame(peak_props, index=x.index[peak_idxs])[["peak_heights", "prominences", "widths"]]
+        result = pd.DataFrame(peak_props, index=x.index[peak_idxs])[["peak_heights", "prominences", "widths"]]
+        result = _find_neighbors(result)
+        return result
     return {d: _extract_peaks(p) for d, p in local_proba.items()}
 
 def align_events(events: Dict[str, pd.DatetimeIndex], sensors: Dict[str, pd.DataFrame]) -> Dict[str, pd.DatetimeIndex]:
