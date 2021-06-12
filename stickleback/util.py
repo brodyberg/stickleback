@@ -46,7 +46,7 @@ def sample_nonevents(sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.Date
     return extract_nested(sensors, idx, win_size)
 
 def _find_neighbors(peaks: pd.DataFrame) -> pd.DataFrame:
-    neighbors = np.zeros(len(p))
+    neighbors = np.zeros(len(peaks))
     for i in range(len(peaks.index)):
         pi = peaks.index[i]
         is_greater = peaks["peak_heights"] >= peaks["peak_heights"][pi]
