@@ -14,10 +14,11 @@ class Stickleback:
         self.tol = tol
         self.nth = nth
 
-    def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex]) -> None:
+    def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], 
+            mask: Dict[str, np.ndarray] = None) -> None:
         # Local step
         event_X = pd.concat(extract_nested(sensors, events, self.win_size).values())
-        nonevent_X = pd.concat(sample_nonevents(sensors, events, self.win_size).values())
+        nonevent_X = pd.concat(sample_nonevents(sensors, events, self.win_size, mask).values())
         local_X = event_X.append(nonevent_X)
         event_y = np.full(len(event_X), Stickleback.event)
         nonevent_y = np.full(len(nonevent_X), Stickleback.nonevent)
@@ -25,7 +26,7 @@ class Stickleback:
         self._fit_local(local_X, local_y)
 
         # Global step
-        local_proba = self._predict_local(sensors)
+        local_proba = self._predict_local(sensors, mask)
         peaks = extract_peaks(local_proba)
         global_X = pd.concat(peaks.values())
         peak_labels = self._label_peaks(peaks, events)
@@ -38,15 +39,15 @@ class Stickleback:
         outcomes = self.assess(predictions, events)
         boosted_X, boosted_y = self._boost(local_X, local_y, sensors, outcomes)
         self._fit_local(boosted_X, boosted_y)
-        local_proba2 = self._predict_local(sensors)
+        local_proba2 = self._predict_local(sensors, mask)
         peaks2 = extract_peaks(local_proba2)
         global_X2 = pd.concat(peaks2.values())
         peak_labels2 = self._label_peaks(peaks2, events)
         global_y2 = pd.concat(peak_labels2.values())
         self._fit_global(global_X2, global_y2)
 
-    def predict(self, sensors: Dict[str, pd.DataFrame]) -> Dict[str, Tuple[pd.Series, pd.DatetimeIndex]]:
-        local_proba = self._predict_local(sensors)
+    def predict(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, Tuple[pd.Series, pd.DatetimeIndex]]:
+        local_proba = self._predict_local(sensors, mask)
         global_pred = self._predict_global(local_proba)
         return {d: (local_proba[d], global_pred[d]) for d in global_pred}
 
@@ -81,8 +82,8 @@ class Stickleback:
     def _fit_local(self, local_X: pd.DataFrame, local_y: np.ndarray) -> None:
         self.local_clf.fit(local_X, local_y)
 
-    def _predict_local(self, sensors: Dict[str, pd.DataFrame]) -> Dict[str, pd.Series]:
-        X = extract_all(sensors, self.nth, self.win_size)
+    def _predict_local(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, pd.Series]:
+        X = extract_all(sensors, self.nth, self.win_size, mask)
         def _predict_local(_X: pd.DataFrame, i: pd.DatetimeIndex):
             return pd.Series(self.local_clf.predict_proba(_X)[:, 0], name="local_proba", index=_X.index) \
                 .reindex(i) \
