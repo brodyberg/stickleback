@@ -1,3 +1,5 @@
+from sklearn import clone
+from sklearn.model_selection import KFold
 from stickleback.util import extract_all, extract_nested, sample_nonevents, extract_peaks
 import numpy as np
 import pandas as pd
@@ -9,12 +11,13 @@ class Stickleback:
 
     def __init__(self, local_clf, global_clf, win_size: int, tol: pd.Timedelta, nth: int = 1) -> None:
         self.local_clf = local_clf
+        self.__local_clf2 = clone(local_clf)
         self.global_clf = global_clf
         self.win_size = win_size
         self.tol = tol
         self.nth = nth
 
-    def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], 
+    def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], n_folds: int = 5,
             mask: Dict[str, np.ndarray] = None) -> None:
         # Local step
         event_X = pd.concat(extract_nested(sensors, events, self.win_size).values())
@@ -25,12 +28,21 @@ class Stickleback:
         local_y = np.concatenate([event_y, nonevent_y])
         self._fit_local(local_X, local_y)
 
-        # Global step
-        local_proba = self._predict_local(sensors, mask)
-        peaks = extract_peaks(local_proba)
-        global_X = pd.concat(peaks.values())
-        peak_labels = self._label_peaks(peaks, events)
-        global_y = pd.concat(peak_labels.values())
+        # Global step (using internal cross validation)
+        kf = KFold(n_folds)
+        deployids = np.array(list(sensors.keys()))
+        global_X, global_y = [], []
+        for train_idx, test_idx in kf.split(deployids):
+            train_X, train_y = local_X[train_idx], local_y[train_idx]
+            test_sensors = {k: v for k, v in sensors.items() if k in deployids[test_idx]}
+            test_events = {k: v for k, v in events.items() if k in deployids[test_idx]}
+            self._fit_local(train_X, train_y, clone=True)
+            local_proba = self._predict_local(test_sensors, mask, clone=True)
+            peaks = extract_peaks(local_proba)
+            global_X.append(pd.concat(peaks.values()))
+            peak_labels = self._label_peaks(peaks, test_events)
+            global_y.append(pd.concat(peak_labels.values()))
+        global_X, global_y = pd.concat(global_X), pd.concat(global_y)
         self._fit_global(global_X, global_y)
 
         # Boost
@@ -39,11 +51,18 @@ class Stickleback:
         outcomes = self.assess(predictions, events)
         boosted_X, boosted_y = self._boost(local_X, local_y, sensors, outcomes)
         self._fit_local(boosted_X, boosted_y)
-        local_proba2 = self._predict_local(sensors, mask)
-        peaks2 = extract_peaks(local_proba2)
-        global_X2 = pd.concat(peaks2.values())
-        peak_labels2 = self._label_peaks(peaks2, events)
-        global_y2 = pd.concat(peak_labels2.values())
+        global_X2, global_y2 = [], []
+        for train_idx, test_idx in kf.split(deployids):
+            train_X, train_y = boosted_X[train_idx], boosted_y[train_idx]
+            test_sensors = {k: v for k, v in sensors.items() if k in deployids[test_idx]}
+            test_events = {k: v for k, v in events.items() if k in deployids[test_idx]}
+            self._fit_local(train_X, train_y, clone=True)
+            local_proba2 = self._predict_local(test_sensors, mask, clone=True)
+            peaks2 = extract_peaks(local_proba2)
+            global_X2.append(pd.concat(peaks2.values()))
+            peak_labels2 = self._label_peaks(peaks2, test_events)
+            global_y2.append(pd.concat(peak_labels2.values()))
+        global_X2, global_y2 = pd.concat(global_X2), pd.concat(global_y2)
         self._fit_global(global_X2, global_y2)
 
     def predict(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, Tuple[pd.Series, pd.DatetimeIndex]]:
@@ -79,13 +98,16 @@ class Stickleback:
         predicted_times = {d: gbl.index[gbl["is_event"] == 1] for d, (_, gbl) in predicted.items()}
         return {deployid: _assess(predicted_times[deployid], events[deployid]) for deployid in predicted}
 
-    def _fit_local(self, local_X: pd.DataFrame, local_y: np.ndarray) -> None:
-        self.local_clf.fit(local_X, local_y)
+    def _fit_local(self, local_X: pd.DataFrame, local_y: np.ndarray, clone: bool = False) -> None:
+        clf = self.__local_clf2 if clone else self.local_clf
+        clf.fit(local_X, local_y)
 
-    def _predict_local(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, pd.Series]:
+    def _predict_local(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None,
+                       clone: bool = False) -> Dict[str, pd.Series]:
+        clf = self.__local_clf2 if clone else self.local_clf
         X = extract_all(sensors, self.nth, self.win_size, mask)
         def _predict_local(_X: pd.DataFrame, i: pd.DatetimeIndex):
-            return pd.Series(self.local_clf.predict_proba(_X)[:, 0], name="local_proba", index=_X.index) \
+            return pd.Series(clf.predict_proba(_X)[:, 0], name="local_proba", index=_X.index) \
                 .reindex(i) \
                 .interpolate(method="cubic") \
                 .fillna(0)
