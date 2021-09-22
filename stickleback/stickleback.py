@@ -9,31 +9,38 @@ class Stickleback:
     event = "event"
     nonevent = "nonevent"
 
-    def __init__(self, local_clf, global_clf, win_size: int, tol: pd.Timedelta, nth: int = 1) -> None:
+    def __init__(self, local_clf, global_clf, win_size: int, tol: pd.Timedelta, nth: int = 1, n_folds: int = 5) -> None:
         self.local_clf = local_clf
         self.__local_clf2 = clone(local_clf)
         self.global_clf = global_clf
         self.win_size = win_size
         self.tol = tol
         self.nth = nth
+        self.n_folds = n_folds
 
-    def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], n_folds: int = 5,
+    def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], 
             mask: Dict[str, np.ndarray] = None) -> None:
         # Local step
-        event_X = pd.concat(extract_nested(sensors, events, self.win_size).values())
-        nonevent_X = pd.concat(sample_nonevents(sensors, events, self.win_size, mask).values())
+        events_nested = extract_nested(sensors, events, self.win_size)
+        event_X = pd.concat(events_nested.values())
+        nonevents_nested = sample_nonevents(sensors, events, self.win_size, mask)
+        nonevent_X = pd.concat(nonevents_nested.values())
         local_X = event_X.append(nonevent_X)
-        event_y = np.full(len(event_X), Stickleback.event)
-        nonevent_y = np.full(len(nonevent_X), Stickleback.nonevent)
+        event_y = np.full(len(event_X), 1.0)
+        nonevent_y = np.full(len(nonevent_X), 0.0)
         local_y = np.concatenate([event_y, nonevent_y])
         self._fit_local(local_X, local_y)
 
         # Global step (using internal cross validation)
+        n_folds = min(self.n_folds, len(sensors.keys()))
         kf = KFold(n_folds)
         deployids = np.array(list(sensors.keys()))
         global_X, global_y = [], []
         for train_idx, test_idx in kf.split(deployids):
-            train_X, train_y = local_X[train_idx], local_y[train_idx]
+            event_train_X = pd.concat([v for k, v in events_nested.items() if k in deployids[train_idx]])
+            nonevent_train_X = pd.concat([v for k, v in nonevents_nested.items() if k in deployids[train_idx]])
+            train_X = event_train_X.append(nonevent_train_X)
+            train_y = np.concatenate([np.full(len(event_train_X), 1.0), np.full(len(nonevent_train_X), 0.0)])
             test_sensors = {k: v for k, v in sensors.items() if k in deployids[test_idx]}
             test_events = {k: v for k, v in events.items() if k in deployids[test_idx]}
             self._fit_local(train_X, train_y, clone=True)
@@ -43,6 +50,7 @@ class Stickleback:
             peak_labels = self._label_peaks(peaks, test_events)
             global_y.append(pd.concat(peak_labels.values()))
         global_X, global_y = pd.concat(global_X), pd.concat(global_y)
+        set_trace()
         self._fit_global(global_X, global_y)
 
         # Boost
@@ -65,7 +73,7 @@ class Stickleback:
         global_X2, global_y2 = pd.concat(global_X2), pd.concat(global_y2)
         self._fit_global(global_X2, global_y2)
 
-    def predict(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, Tuple[pd.Series, pd.DatetimeIndex]]:
+    def predict(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, Tuple[pd.Series, pd.DataFrame]]:
         local_proba = self._predict_local(sensors, mask)
         global_pred = self._predict_global(local_proba)
         return {d: (local_proba[d], global_pred[d]) for d in global_pred}
@@ -114,13 +122,14 @@ class Stickleback:
         return {deployid: _predict_local(X[deployid], sensors[deployid].index) for deployid in X}
 
     def _label_peaks(self, peaks: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex]) -> Dict[str, pd.Series]:
-        def _label_peaks(_peaks: pd.DataFrame, _events: pd.DatetimeIndex) -> pd.Series:
+        def __label_peaks(_peaks: pd.DataFrame, _events: pd.DatetimeIndex) -> pd.Series:
             times = _peaks.index
 
+            # Find the most prominent nearby peak (within tol)
             def find_nearest_peak(_event):
                 near = np.where(np.logical_and(_event - self.tol <= times, times <= _event + self.tol))[0]
-                near_heights = _peaks["peak_heights"][near]
-                return near[np.argmax(near_heights)] if len(near_heights) > 0 else None
+                near_prom = _peaks["prominences"][near]
+                return near[np.argmax(near_prom)] if len(near_prom) > 0 else None
             
             nearest_peaks = [find_nearest_peak(e) for e in _events]
             nearest_peaks = [i for i in nearest_peaks if i is not None]
@@ -128,7 +137,7 @@ class Stickleback:
             outcomes = pd.Series(0, index=times)
             outcomes[tps] = 1
             return outcomes
-        return {d: _label_peaks(peaks[d], events[d]) for d in peaks}
+        return {d: __label_peaks(peaks[d], events[d]) for d in peaks}
 
     def _fit_global(self, global_X: Dict[str, pd.DataFrame], global_y: Dict[str, pd.Series]) -> None:
         self.global_clf.fit(global_X, global_y)
