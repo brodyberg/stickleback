@@ -1,13 +1,13 @@
 from sklearn import clone
 from sklearn.model_selection import KFold
-from stickleback.util import extract_all, extract_nested, sample_nonevents, extract_peaks
+from stickleback.util import extract_all, extract_nested, sample_nonevents, extract_peaks, filter_dict
 import numpy as np
 import pandas as pd
 from typing import Dict, Tuple
 
+from pdb import set_trace
+
 class Stickleback:
-    event = "event"
-    nonevent = "nonevent"
 
     def __init__(self, local_clf, global_clf, win_size: int, tol: pd.Timedelta, nth: int = 1, n_folds: int = 5) -> None:
         self.local_clf = local_clf
@@ -41,8 +41,8 @@ class Stickleback:
             nonevent_train_X = pd.concat([v for k, v in nonevents_nested.items() if k in deployids[train_idx]])
             train_X = event_train_X.append(nonevent_train_X)
             train_y = np.concatenate([np.full(len(event_train_X), 1.0), np.full(len(nonevent_train_X), 0.0)])
-            test_sensors = {k: v for k, v in sensors.items() if k in deployids[test_idx]}
-            test_events = {k: v for k, v in events.items() if k in deployids[test_idx]}
+            test_sensors = filter_dict(sensors, deployids[test_idx])
+            test_events = filter_dict(events, deployids[test_idx])
             self._fit_local(train_X, train_y, clone=True)
             local_proba = self._predict_local(test_sensors, mask, clone=True)
             peaks = extract_peaks(local_proba)
@@ -56,13 +56,19 @@ class Stickleback:
         global_pred = self._predict_global(local_proba)
         predictions = {d: (local_proba[d], global_pred[d]) for d in global_pred}
         outcomes = self.assess(predictions, events)
-        boosted_X, boosted_y = self._boost(local_X, local_y, sensors, outcomes)
+        boosted_nonevents = self._boost(nonevents_nested, sensors, outcomes)
+        n_nonevents = np.sum([len(v) for v in boosted_nonevents.values()])
+        boosted_X = event_X.append(pd.concat(boosted_nonevents.values()))
+        boosted_y = np.concatenate([event_y, np.full(n_nonevents, 0.0)])
         self._fit_local(boosted_X, boosted_y)
         global_X2, global_y2 = [], []
         for train_idx, test_idx in kf.split(deployids):
-            train_X, train_y = boosted_X[train_idx], boosted_y[train_idx]
-            test_sensors = {k: v for k, v in sensors.items() if k in deployids[test_idx]}
-            test_events = {k: v for k, v in events.items() if k in deployids[test_idx]}
+            event_train_X = pd.concat([v for k, v in events_nested.items() if k in deployids[train_idx]])
+            nonevent_train_X = pd.concat([v for k, v in boosted_nonevents.items() if k in deployids[train_idx]])
+            train_X = event_train_X.append(nonevent_train_X)
+            train_y = np.concatenate([np.full(len(event_train_X), 1.0), np.full(len(nonevent_train_X), 0.0)])
+            test_sensors = filter_dict(sensors, deployids[test_idx])
+            test_events = filter_dict(events, deployids[test_idx])
             self._fit_local(train_X, train_y, clone=True)
             local_proba2 = self._predict_local(test_sensors, mask, clone=True)
             peaks2 = extract_peaks(local_proba2)
@@ -150,12 +156,16 @@ class Stickleback:
             return result
         return {deployid: predict_peaks(p) for deployid, p in peaks.items()}
         
-    def _boost(self, local_X: pd.DataFrame, local_y: np.ndarray, sensors: Dict[str, pd.DataFrame], 
+    # boosted_nonevents = self._boost(nonevents_nested, sensors, outcomes)
+    def _boost(self, nonevents: Dict[str, pd.DataFrame], sensors: Dict[str, pd.DataFrame], 
                outcomes: Dict[str, pd.Series]) -> Tuple[pd.DataFrame, list]:
         fps = {d: o.index[o == "FP"] for d, o in outcomes.items()}
-        nfps = np.sum([len(f) for f in fps.values()])
-
-        boosted_X = local_X.append(pd.concat(extract_nested(sensors, fps, self.win_size).values()))
-        boosted_y = np.concatenate([local_y, np.full(nfps, Stickleback.nonevent)])
-        return boosted_X, boosted_y
+        nested_fps = extract_nested(sensors, fps, self.win_size)
+        boosted_nonevents = dict()
+        for k in nonevents:
+            if k in nested_fps: 
+                boosted_nonevents[k] = pd.concat([nonevents[k], nested_fps[k]])
+            else:
+                boosted_nonevents[k] = nonevents[k]
+        return boosted_nonevents
     

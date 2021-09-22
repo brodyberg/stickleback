@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy.signal import find_peaks
-from sktime.utils import from_3d_numpy_to_nested
+from sktime.datatypes._panel._convert import from_3d_numpy_to_nested
 from typing import Dict, Tuple
 
 def extract_nested(sensors: Dict[str, pd.DataFrame], idx: Dict[str, pd.DatetimeIndex], 
@@ -30,7 +30,8 @@ def extract_all(sensors: Dict[str, pd.DataFrame], nth: int, win_size: int, mask:
     idx = dict()
     for d in sensors:
         _idx = np.arange(win_size_2, len(sensors[d]) - win_size_2, nth)
-        _idx = _idx[mask[d]]
+        # Next line (admittedly) confusing. Look up _idx in mask[d] and keep only those where mask is True
+        _idx = _idx[mask[d][_idx]]
         idx[d] = sensors[d].index[_idx]
     return extract_nested(sensors, idx, win_size)
     
@@ -65,7 +66,5 @@ def align_events(events: Dict[str, pd.DatetimeIndex], sensors: Dict[str, pd.Data
     return {d: sensors[d].index[sensors[d].index.searchsorted(e)] 
             for d, e in events.items()}
 
-def split_dict(dict: dict, keys: set) -> Tuple[dict, dict]:
-    dict1 = {k: v for k, v in dict.items() if k in keys}
-    dict2 = {k: v for k, v in dict.items() if k not in keys}
-    return dict1, dict2
+def filter_dict(d: dict, ks: set) -> dict:
+    return {k: v for k, v in d.items() if k in ks}
