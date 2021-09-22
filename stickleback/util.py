@@ -1,31 +1,8 @@
 import pandas as pd
 import numpy as np
 from scipy.signal import find_peaks
-from sktime.utils.data_processing import from_3d_numpy_to_nested
-from typing import Dict, OrderedDict, Tuple
-
-def to_nested(sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], nth: int, win_size: int, 
-              mask: Dict[str, np.ndarray] = None) -> Tuple[OrderedDict[str, pd.DataFrame], OrderedDict[str, np.ndarray]]:
-    win_size_2 = int(win_size / 2)
-    Xs = OrderedDict()
-    ys = OrderedDict()
-    for deployid, _sensors in sensors.items():
-        idx = np.arange(win_size_2, len(_sensors) - win_size_2, nth)
-        data_3d = np.empty([len(idx), len(_sensors.columns), win_size], float)
-        data_arr = _sensors.to_numpy().transpose()
-        for i, start in enumerate(idx - win_size_2):
-            data_3d[i] = data_arr[:, start:(start + win_size)]
-        X = from_3d_numpy_to_nested(data_3d)
-        X.columns = _sensors.columns
-        X.index = _sensors.index[idx]
-        Xs[deployid] = X
-        
-        y = np.zeros(len(_sensors))
-        for e in events[deployid]:
-            i = _sensors.index.get_loc(e)
-            y[max(i - win_size_2, 0):min(i + win_size_2, len(y))] = 1
-        ys[deployid] = y[idx]
-    return Xs, ys
+from sktime.utils import from_3d_numpy_to_nested
+from typing import Dict, Tuple
 
 def extract_nested(sensors: Dict[str, pd.DataFrame], idx: Dict[str, pd.DatetimeIndex], 
                    win_size: int) -> Dict[str, pd.DataFrame]:
@@ -47,13 +24,13 @@ def extract_nested(sensors: Dict[str, pd.DataFrame], idx: Dict[str, pd.DatetimeI
     return {d: _extract(d, i) for d, i in idx.items()}
 
 def extract_all(sensors: Dict[str, pd.DataFrame], nth: int, win_size: int, mask: Dict[str, np.ndarray] = None) -> Dict[str, pd.DataFrame]:
-    # if mask is None:
-    #     mask = {d: np.full(len(sensors[d]), True) for d in sensors}
+    if mask is None:
+        mask = {d: np.full(len(sensors[d]), True) for d in sensors}
     win_size_2 = int(win_size / 2)
     idx = dict()
     for d in sensors:
         _idx = np.arange(win_size_2, len(sensors[d]) - win_size_2, nth)
-        # _idx = _idx[mask[d]]
+        _idx = _idx[mask[d]]
         idx[d] = sensors[d].index[_idx]
     return extract_nested(sensors, idx, win_size)
     
@@ -77,27 +54,10 @@ def sample_nonevents(sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.Date
     idx = {d: _sample(sensors[d], events[d], mask[d]) for d in sensors}
     return extract_nested(sensors, idx, win_size)
 
-def _find_neighbors(peaks: pd.DataFrame) -> pd.DataFrame:
-    neighbors = np.zeros(len(peaks))
-    for i in range(len(peaks.index)):
-        pi = peaks.index[i]
-        is_greater = peaks["peak_heights"] >= peaks["peak_heights"][pi]
-        distances = np.asarray(np.abs(pi - peaks.index[is_greater]))
-        if len(distances) == 1:
-            neighbors[i] = -1
-        else:
-            distances.sort()
-            # distances[0] is always 0 (itself), so distances[1] is the nearest neighbor
-            neighbors[i] = distances[1]
-    neighbors[neighbors == -1] = neighbors.max()
-    peaks["neighbors"] = neighbors
-    return peaks
-
 def extract_peaks(local_proba: Dict[str, pd.Series]) -> Dict[str, pd.DataFrame]:
     def _extract_peaks(x: pd.Series) -> pd.DataFrame:
         peak_idxs, peak_props = find_peaks(x.fillna(0), height=0.1, prominence=0.1, width=1, rel_height=0.5)
         result = pd.DataFrame(peak_props, index=x.index[peak_idxs])[["peak_heights", "prominences", "widths"]]
-        # result = _find_neighbors(result)
         return result
     return {d: _extract_peaks(p) for d, p in local_proba.items()}
 

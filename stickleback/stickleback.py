@@ -50,7 +50,6 @@ class Stickleback:
             peak_labels = self._label_peaks(peaks, test_events)
             global_y.append(pd.concat(peak_labels.values()))
         global_X, global_y = pd.concat(global_X), pd.concat(global_y)
-        set_trace()
         self._fit_global(global_X, global_y)
 
         # Boost
