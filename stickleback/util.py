@@ -50,7 +50,7 @@ def sample_nonevents(sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.Date
         nonevent_choices = nonevent_choices[_mask[nonevent_choices]]
         diff_from_event = _diff_from(nonevent_choices, _sensors.index.searchsorted(_events))
         nonevent_choices = nonevent_choices[diff_from_event > win_size]
-        return _sensors.index[rg.choice(nonevent_choices, size=len(_events), replace=False)]
+        return _sensors.index[rg.choice(nonevent_choices, size=len(_events), replace=True)]
 
     idx = {d: _sample(sensors[d], events[d], mask[d]) for d in sensors}
     return extract_nested(sensors, idx, win_size)
