@@ -1,5 +1,7 @@
+from scipy.signal import find_peaks
 from sklearn import clone
 from sklearn.model_selection import KFold
+from sktime.datatypes._panel._convert import from_nested_to_3d_numpy
 from stickleback.util import extract_all, extract_nested, sample_nonevents, extract_peaks, filter_dict
 import numpy as np
 import pandas as pd
@@ -9,10 +11,10 @@ from pdb import set_trace
 
 class Stickleback:
 
-    def __init__(self, local_clf, global_clf, win_size: int, tol: pd.Timedelta, nth: int = 1, n_folds: int = 5) -> None:
+    def __init__(self, local_clf, win_size: int, tol: pd.Timedelta, nth: int = 1, n_folds: int = 5) -> None:
         self.local_clf = local_clf
         self.__local_clf2 = clone(local_clf)
-        self.global_clf = global_clf
+        self.prominence = None
         self.win_size = win_size
         self.tol = tol
         self.nth = nth
@@ -32,63 +34,35 @@ class Stickleback:
         self._fit_local(local_X, local_y)
 
         # Global step (using internal cross validation)
-        n_folds = min(self.n_folds, len(sensors.keys()))
-        kf = KFold(n_folds)
-        deployids = np.array(list(sensors.keys()))
-        global_X, global_y = [], []
-        for train_idx, test_idx in kf.split(deployids):
-            event_train_X = pd.concat([v for k, v in events_nested.items() if k in deployids[train_idx]])
-            nonevent_train_X = pd.concat([v for k, v in nonevents_nested.items() if k in deployids[train_idx]])
-            train_X = event_train_X.append(nonevent_train_X)
-            train_y = np.concatenate([np.full(len(event_train_X), 1.0), np.full(len(nonevent_train_X), 0.0)])
-            test_sensors = filter_dict(sensors, deployids[test_idx])
-            test_events = filter_dict(events, deployids[test_idx])
-            self._fit_local(train_X, train_y, clone=True)
-            local_proba = self._predict_local(test_sensors, mask, clone=True)
-            peaks = extract_peaks(local_proba)
-            global_X.append(pd.concat(peaks.values()))
-            peak_labels = self._label_peaks(peaks, test_events)
-            global_y.append(pd.concat(peak_labels.values()))
-        global_X, global_y = pd.concat(global_X), pd.concat(global_y)
-        self._fit_global(global_X, global_y)
+        local_proba_cv = self._fit_global(events_nested, nonevents_nested, sensors, events, mask)
 
         # Boost
-        global_pred = self._predict_global(local_proba)
-        predictions = {d: (local_proba[d], global_pred[d]) for d in global_pred}
-        outcomes = self.assess(predictions, events)
+        predictions = self._predict_global(local_proba_cv)
+        outcomes = self._assess(predictions, events)
         boosted_nonevents = self._boost(nonevents_nested, sensors, outcomes)
         n_nonevents = np.sum([len(v) for v in boosted_nonevents.values()])
         boosted_X = event_X.append(pd.concat(boosted_nonevents.values()))
         boosted_y = np.concatenate([event_y, np.full(n_nonevents, 0.0)])
         self._fit_local(boosted_X, boosted_y)
-        global_X2, global_y2 = [], []
-        for train_idx, test_idx in kf.split(deployids):
-            event_train_X = pd.concat([v for k, v in events_nested.items() if k in deployids[train_idx]])
-            nonevent_train_X = pd.concat([v for k, v in boosted_nonevents.items() if k in deployids[train_idx]])
-            train_X = event_train_X.append(nonevent_train_X)
-            train_y = np.concatenate([np.full(len(event_train_X), 1.0), np.full(len(nonevent_train_X), 0.0)])
-            test_sensors = filter_dict(sensors, deployids[test_idx])
-            test_events = filter_dict(events, deployids[test_idx])
-            self._fit_local(train_X, train_y, clone=True)
-            local_proba2 = self._predict_local(test_sensors, mask, clone=True)
-            peaks2 = extract_peaks(local_proba2)
-            global_X2.append(pd.concat(peaks2.values()))
-            peak_labels2 = self._label_peaks(peaks2, test_events)
-            global_y2.append(pd.concat(peak_labels2.values()))
-        global_X2, global_y2 = pd.concat(global_X2), pd.concat(global_y2)
-        self._fit_global(global_X2, global_y2)
+        self._fit_global(events_nested, boosted_nonevents, sensors, events, mask)
 
-    def predict(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, Tuple[pd.Series, pd.DataFrame]]:
+    def predict(self, sensors: Dict[str, pd.DataFrame], mask: Dict[str, np.ndarray] = None) -> Dict[str, Tuple[pd.Series, pd.DatetimeIndex]]:
         local_proba = self._predict_local(sensors, mask)
         global_pred = self._predict_global(local_proba)
         return {d: (local_proba[d], global_pred[d]) for d in global_pred}
 
     def assess(self, predicted: Dict[str, Tuple[pd.Series, pd.DatetimeIndex]], events: Dict[str, pd.DatetimeIndex]) -> Dict[str, pd.Series]:
-        def _assess(_predicted: pd.DatetimeIndex, _events: pd.DatetimeIndex) -> pd.Series:
+        predicted2 = {k: v[1] for k, v in predicted.items()}
+        return self._assess(predicted2, events)
+
+    def _assess(self, predicted: Dict[str, pd.DatetimeIndex], events: Dict[str, pd.DatetimeIndex]) -> Dict[str, pd.Series]:
+        result = dict()
+        for deployid in predicted:
+            _predicted, _actual = predicted[deployid], events[deployid]
             # Find closest predicted to each actual and their distance
             # TODO handle no predicted events case
-            closest = _predicted[[np.argmin(np.abs(_predicted - e)) for e in _events]]
-            distance = np.abs(_events - closest)
+            closest = _predicted[[np.argmin(np.abs(_predicted - e)) for e in _actual]]
+            distance = np.abs(_actual - closest)
             
             # Initialize outcomes
             outcomes = pd.Series(index=_predicted, dtype="string", name="outcome")
@@ -99,7 +73,7 @@ class Stickleback:
                 if d <= self.tol:
                     outcomes[c] = "TP" 
                 else:
-                    outcomes[_events[i]] = "FN"
+                    outcomes[_actual[i]] = "FN"
 
             # Iterate through predicted events. Any predicted events that aren't the closest to an actual event are false
             # positives.
@@ -107,11 +81,13 @@ class Stickleback:
                 if p not in closest:
                     outcomes[p] = "FP" 
 
-            return outcomes
-        predicted_times = {d: gbl.index[gbl["is_event"] == 1] for d, (_, gbl) in predicted.items()}
-        return {deployid: _assess(predicted_times[deployid], events[deployid]) for deployid in predicted}
+            result[deployid] = outcomes
+        return result
 
     def _fit_local(self, local_X: pd.DataFrame, local_y: np.ndarray, clone: bool = False) -> None:
+        if len(local_X.columns) > 1:
+            local_X = from_nested_to_3d_numpy(local_X)
+
         clf = self.__local_clf2 if clone else self.local_clf
         clf.fit(local_X, local_y)
 
@@ -144,17 +120,43 @@ class Stickleback:
             return outcomes
         return {d: __label_peaks(peaks[d], events[d]) for d in peaks}
 
-    def _fit_global(self, global_X: Dict[str, pd.DataFrame], global_y: Dict[str, pd.Series]) -> None:
-        self.global_clf.fit(global_X, global_y)
+    def _fit_global(self, events_nested, nonevents_nested, sensors, events, mask) -> Dict[str, pd.Series]:
+        # Global step (using internal cross validation)
+        n_folds = min(self.n_folds, len(sensors.keys()))
+        kf = KFold(n_folds)
+        deployids = np.array(list(sensors.keys()))
+        local_proba = dict()
+        for train_idx, test_idx in kf.split(deployids):
+            event_train_X = pd.concat([v for k, v in events_nested.items() if k in deployids[train_idx]])
+            nonevent_train_X = pd.concat([v for k, v in nonevents_nested.items() if k in deployids[train_idx]])
+            train_X = event_train_X.append(nonevent_train_X)
+            train_y = np.concatenate([np.full(len(event_train_X), 1.0), np.full(len(nonevent_train_X), 0.0)])
+            test_sensors = filter_dict(sensors, deployids[test_idx])
+            self._fit_local(train_X, train_y, clone=True)
+            local_proba.update(self._predict_local(test_sensors, mask, clone=True))
+        prominence = np.linspace(0, 1, 25)
+        f1 = np.zeros(prominence.shape)
+        for i, p in enumerate(prominence):
+            peaks = dict()
+            for k, v in local_proba.items():
+                idx, _ = find_peaks(v.fillna(0), prominence=p)
+                peaks[k] = v.index[idx]
+            outcomes = self._assess(peaks, events)
+            tps = fps = fns = 0
+            for o in outcomes.values():
+                tps += (o == "TP").sum()
+                fps += (o == "FP").sum()
+                fns += (o == "FN").sum()
+            f1[i] = tps / (tps + (fps + fns) / 2)
+        self.prominence = prominence[np.argmax(f1)]
+        return local_proba
 
-    def _predict_global(self, local_proba: Dict[str, pd.Series]) -> Dict[str, pd.DataFrame]:
-        peaks = extract_peaks(local_proba)
-        def predict_peaks(_peaks: pd.DataFrame):
-            result = pd.DataFrame({"global_proba": self.global_clf.predict_proba(_peaks)[:, 0],
-                                   "is_event": self.global_clf.predict(_peaks)},
-                                   index = _peaks.index)
-            return result
-        return {deployid: predict_peaks(p) for deployid, p in peaks.items()}
+    def _predict_global(self, local_proba: Dict[str, pd.Series]) -> Dict[str, pd.DatetimeIndex]:
+        peaks = dict()
+        for k, v in local_proba.items():
+            idx, _ = find_peaks(v.fillna(0), prominence=self.prominence)
+            peaks[k] = v.index[idx]
+        return peaks
         
     # boosted_nonevents = self._boost(nonevents_nested, sensors, outcomes)
     def _boost(self, nonevents: Dict[str, pd.DataFrame], sensors: Dict[str, pd.DataFrame], 
