@@ -21,11 +21,22 @@ class Stickleback:
         self.n_folds = n_folds
 
     def fit(self, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], 
-            mask: Dict[str, np.ndarray] = None) -> None:
+            mask: Dict[str, np.ndarray] = None, max_events: int = None) -> None:
         # Local step
-        events_nested = extract_nested(sensors, events, self.win_size)
+        if max_events is None:
+            training_events = events
+        else:
+            n_events = np.array([len(v) for v in events.values()])
+            if n_events.sum() <= max_events:
+                training_events = events
+            else:
+                rg = np.random.Generator(np.random.PCG64())
+                keep = max_events / n_events.sum()
+                training_events = {k: rg.choice(v, size=int(len(v)*keep), replace=False) 
+                                   for k, v in events.items()}
+        events_nested = extract_nested(sensors, training_events, self.win_size)
         event_X = pd.concat(events_nested.values())
-        nonevents_nested = sample_nonevents(sensors, events, self.win_size, mask)
+        nonevents_nested = sample_nonevents(sensors, training_events, self.win_size, mask)
         nonevent_X = pd.concat(nonevents_nested.values())
         local_X = event_X.append(nonevent_X)
         event_y = np.full(len(event_X), 1.0)
