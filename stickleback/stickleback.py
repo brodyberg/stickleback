@@ -77,7 +77,7 @@ class Stickleback:
             
             # Initialize outcomes
             outcomes = pd.Series(index=_predicted, dtype="string", name="outcome")
-            
+
             # Iterate through actual events. The closest predicted event within the tolerance is a true positive. If no
             # predicted events are within the tolerance, the actual event is a false negative.
             for i, (c, d) in enumerate(zip(closest, distance)):
@@ -86,11 +86,8 @@ class Stickleback:
                 else:
                     outcomes[_actual[i]] = "FN"
 
-            # Iterate through predicted events. Any predicted events that aren't the closest to an actual event are false
-            # positives.
-            for i, p in enumerate(_predicted):
-                if p not in closest:
-                    outcomes[p] = "FP" 
+            # Remaining predictions are false positives
+            outcomes[outcomes.isna()] = "FP"
 
             result[deployid] = outcomes
         return result
@@ -106,12 +103,16 @@ class Stickleback:
                        clone: bool = False) -> Dict[str, pd.Series]:
         clf = self.__local_clf2 if clone else self.local_clf
         X = extract_all(sensors, self.nth, self.win_size, mask)
-        def _predict_local(_X: pd.DataFrame, i: pd.DatetimeIndex):
-            return pd.Series(clf.predict_proba(_X)[:, 0], name="local_proba", index=_X.index) \
-                .reindex(i) \
-                .interpolate(method="cubic") \
-                .fillna(0)
-        return {deployid: _predict_local(X[deployid], sensors[deployid].index) for deployid in X}
+
+        def _predict_local(_X: pd.DataFrame, i: pd.DatetimeIndex, _mask: np.ndarray):
+            local = pd.Series(clf.predict_proba(_X)[:, 0], 
+                              name="local_proba", 
+                              index=_X.index). \
+                    reindex(i)
+            local[np.logical_not(mask)] = 0.
+            return local.interpolate(method="cubic").fillna(0)
+            
+        return {deployid: _predict_local(X[deployid], sensors[deployid].index, mask[deployid]) for deployid in X}
 
     def _label_peaks(self, peaks: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex]) -> Dict[str, pd.Series]:
         def __label_peaks(_peaks: pd.DataFrame, _events: pd.DatetimeIndex) -> pd.Series:
