@@ -50,13 +50,12 @@ def __plot_sensors_events_static(sensors, event_sensors) -> matplotlibFigure:
     return fig
 
 def plot_predictions(deployid: str, sensors: Dict[str, pd.DataFrame], 
-                     predictions: Dict[str, Tuple[pd.Series, pd.DataFrame]],
+                     predictions: Dict[str, Tuple[pd.Series, pd.DatetimeIndex]],
                      outcomes: Dict[str, pd.Series]=None, interactive=True) -> Union[plotlyFigure, matplotlibFigure]:
     lcl, gbl = predictions[deployid]
     data = sensors[deployid].join(lcl)
-    predicted_idx = gbl.index[gbl["is_event"] == 1]
 
-    predicted_only = data.loc[predicted_idx]
+    predicted_only = data.loc[gbl]
     actual_only = None
     if outcomes is not None:
         predicted_only = predicted_only.join(outcomes[deployid])
