@@ -5,9 +5,15 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.graph_objs._figure import Figure as plotlyFigure
 from plotly.subplots import make_subplots
+from stickleback.types import *
 from typing import Dict, Tuple, Union
 
-def plot_sensors_events(deployid: str, sensors: Dict[str, pd.DataFrame], events: Dict[str, pd.DatetimeIndex], interactive=True) -> Union[plotlyFigure, matplotlibFigure]:
+figure_T = Union[plotlyFigure, matplotlibFigure]
+
+def plot_sensors_events(deployid: str, 
+                        sensors: sensors_T, 
+                        events: events_T, 
+                        interactive=True) -> figure_T:
     _sensors = sensors[deployid]
     _events = _sensors.loc[events[deployid]]
     
@@ -42,16 +48,22 @@ def __plot_sensors_events_static(sensors, event_sensors) -> matplotlibFigure:
         # sensor data
         axs[i].plot(sensors.index, sensors[col], "-", zorder=1)
         # events
-        axs[i].scatter(event_sensors.index, event_sensors[col], facecolors="none", edgecolors="r", zorder=2)
+        axs[i].scatter(event_sensors.index, 
+                       event_sensors[col], 
+                       facecolors="none", 
+                       edgecolors="r", 
+                       zorder=2)
         axs[i].set_ylabel(col)
         if col == "depth":
             axs[i].invert_yaxis()
         
     return fig
 
-def plot_predictions(deployid: str, sensors: Dict[str, pd.DataFrame], 
-                     predictions: Dict[str, Tuple[pd.Series, pd.DatetimeIndex]],
-                     outcomes: Dict[str, pd.Series]=None, interactive=True) -> Union[plotlyFigure, matplotlibFigure]:
+def plot_predictions(deployid: str, 
+                     sensors: sensors_T, 
+                     predictions: prediction_T,
+                     outcomes: outcomes_T = None, 
+                     interactive: bool = True) -> figure_T:
     lcl, gbl = predictions[deployid]
     data = sensors[deployid].join(lcl)
 
@@ -59,7 +71,8 @@ def plot_predictions(deployid: str, sensors: Dict[str, pd.DataFrame],
     actual_only = None
     if outcomes is not None:
         predicted_only = predicted_only.join(outcomes[deployid])
-        actual_idx = outcomes[deployid].index[outcomes[deployid].isin(["TP", "FN"])]
+        is_actual = outcomes[deployid].isin(["TP", "FN"])
+        actual_idx = outcomes[deployid].index[is_actual]
         actual_only = data.loc[actual_idx].join(outcomes[deployid])
 
     if interactive:
@@ -67,15 +80,19 @@ def plot_predictions(deployid: str, sensors: Dict[str, pd.DataFrame],
     else:
         return __plot_predictions_static(data, predicted_only, actual_only)
 
-def __plot_predictions_interactive(data: pd.DataFrame, predicted: pd.DataFrame, actual: pd.DataFrame) -> plotlyFigure:
+def __plot_predictions_interactive(data: pd.DataFrame, 
+                                   predicted: pd.DataFrame, 
+                                   actual: pd.DataFrame) -> plotlyFigure:
     fig = make_subplots(rows=len(data.columns), cols=1,
                         shared_xaxes=True,)
 
     pred_color = "purple"
     if "outcome" in predicted.columns:
-        pred_color = ["blue" if o == "TP" else "red" for o in predicted["outcome"]]
+        pred_color = ["blue" if o == "TP" else "red" 
+                      for o in predicted["outcome"]]
     if actual is not None:
-        actual_color = ["blue" if o == "TP" else "red" for o in actual["outcome"]]
+        actual_color = ["blue" if o == "TP" else "red" 
+                        for o in actual["outcome"]]
 
     for i, col in enumerate(data):
         # Line plot
@@ -118,11 +135,13 @@ def __plot_predictions_static(data, predicted, actual) -> matplotlibFigure:
         # predicted events
         axs[i].scatter(predicted.index, 
                         predicted[col], 
-                        c=["blue" if o == "TP" else "red" for o in predicted["outcome"]], zorder=2)
+                        c=["blue" if o == "TP" else "red" 
+                           for o in predicted["outcome"]], zorder=2)
         # actual events
         axs[i].scatter(actual.index, 
                         actual[col], 
-                        edgecolors=["blue" if o == "TP" else "red" for o in actual["outcome"]],
+                        edgecolors=["blue" if o == "TP" else "red" 
+                                    for o in actual["outcome"]],
                         facecolors="none",
                         zorder=3)
         if col == "depth":
@@ -135,5 +154,6 @@ def outcome_table(outcomes: Dict[str, pd.Series]) -> pd.DataFrame:
         result = pd.DataFrame(o)
         result.insert(0, "deployid", np.full(len(o), [d]))
         return result
+    
     counts = pd.concat([add_deployid(d, o) for d, o in outcomes.items()])
     return counts.groupby(["deployid", "outcome"]).size().unstack(fill_value=0)
