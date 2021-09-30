@@ -9,22 +9,13 @@ n = 20
 idx1 = pd.date_range(start="2020-01-01 00:00", freq="S", periods=n, tz="Etc/GMT+7")
 idx2 = pd.date_range(start="2020-02-01 00:00", freq="S", periods=n, tz="Etc/GMT+3")
 sensors = {
-        "d1": pd.DataFrame({
-            "a": np.arange(n),
-            "b": np.arange(n) ** 2
-        }, index = idx1),
-        "d2": pd.DataFrame({
-            "a": -np.arange(n),
-            "b": -(np.arange(n) ** 2)
-        }, index = idx2)
-    }
-events = {
-    "d1": idx1[[2, 6]],
-    "d2": idx2[[3, 8]]
+    "d1": pd.DataFrame({"a": np.arange(n), "b": np.arange(n) ** 2}, index=idx1),
+    "d2": pd.DataFrame({"a": -np.arange(n), "b": -(np.arange(n) ** 2)}, index=idx2),
 }
+events = {"d1": idx1[[2, 6]], "d2": idx2[[3, 8]]}
+
 
 class ExtractTestCase(unittest.TestCase):
-    
     def test_extract_all(self):
         winsz = 3
         result = extract_all(sensors, nth=1, win_size=winsz)
