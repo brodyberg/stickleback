@@ -1,12 +1,46 @@
-```python
-%load_ext autoreload
-%autoreload 2
-```
-
 # stickleback
 
 A Python package for finding *point behaviors* in longitudinal sensor data.
 
+## Installation of Pre-reqs
+
+- Install [GitHub Desktop](https://desktop.github.com/)
+- Clone [the repo](https://github.com/FlukeAndFeather/stickleback)
+- Install [Python 3](https://www.python.org/downloads/)
+- Install Pip: `python3 -m pip install --upgrade pip setuptools wheel`
+- Update your PATH as needed (you'd have been warned during pip install)
+- Install [VS Code](https://code.visualstudio.com/download)
+- Install [Python VS Code extension](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
+- Run `python3 -m pip install scikit-learn`
+- Run `python3 -m pip install plotly`
+- Run `python3 -m pip install scipy`
+- Run `python3 -m pip install matplotlib`
+- Run `python3 -m pip install jupyter`
+- Run `python3 -m pip install netcdf4`
+- Run `python3 -m pip install pandas`
+- Run `python3 -m pip install sktime`
+- Run `python3 -m pip install sklearn`
+
+```
+ModuleNotFoundError                       Traceback (most recent call last)
+/var/folders/23/f9jzgvns2378jgmdt5v42sj00000gn/T/ipykernel_30962/3191659921.py in <module>
+      2 import numpy as np
+      3 import pandas as pd
+----> 4 from stickleback.stickleback import Stickleback
+      5 plt.rcParams['figure.figsize'] = [12, 8]
+
+ModuleNotFoundError: No module named 'stickleback'
+```
+
+
+---
+
+## Begin Notebook
+
+```python
+%load_ext autoreload
+%autoreload 2
+```
 
 ```python
 import matplotlib.pyplot as plt

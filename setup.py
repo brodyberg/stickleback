@@ -15,6 +15,7 @@ setup(
             "plotly~=4.12",
             "scikit-learn~=0.24",
             "scipy~=1.6",
-            "sktime~=0.8"
+            "sktime~=0.8",
+            "sklearn"
         ]
 )
