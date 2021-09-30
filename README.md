@@ -12,7 +12,7 @@ A Python package for finding *point behaviors* in longitudinal sensor data.
 - Install [Node](https://nodejs.org/en/download/)
 - Install [NPM](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
 - Install Yarn: `npm install -g yarn`
-- Install Node modules: `npm install`
+- Install Node modules: `yarn install`
 - Install [VS Code](https://code.visualstudio.com/download)
 - Install [Python VS Code extension](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
 - Run `python3 -m pip install scikit-learn`
