@@ -9,6 +9,10 @@ A Python package for finding *point behaviors* in longitudinal sensor data.
 - Install [Python 3](https://www.python.org/downloads/)
 - Install Pip: `python3 -m pip install --upgrade pip setuptools wheel`
 - Update your PATH as needed (you'd have been warned during pip install)
+- Install [Node](https://nodejs.org/en/download/)
+- Install [NPM](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+- Install Yarn: `npm install -g yarn`
+- Install Node modules: `npm install`
 - Install [VS Code](https://code.visualstudio.com/download)
 - Install [Python VS Code extension](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
 - Run `python3 -m pip install scikit-learn`
@@ -20,6 +24,9 @@ A Python package for finding *point behaviors* in longitudinal sensor data.
 - Run `python3 -m pip install pandas`
 - Run `python3 -m pip install sktime`
 - Run `python3 -m pip install sklearn`
+- Run `pip install black`
+
+
 
 ```
 ModuleNotFoundError                       Traceback (most recent call last)
