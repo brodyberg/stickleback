@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import sktime.datatypes._panel._convert as convert
 from stickleback.types import *
-from typing import Collection, Dict, Tuple
+from typing import Collection, Dict, Tuple, Union
 
 
 def extract_nested(
@@ -105,3 +105,8 @@ def load_fitted(
         result = pickle.load(f)
 
     return result
+
+def f1(tps: Union[float, pd.Series],
+       fps: Union[float, pd.Series],
+       fns: Union[float, pd.Series]) -> Union[float, pd.Series]:
+    return tps / (tps + (fps + fns) / 2)

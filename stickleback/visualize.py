@@ -5,8 +5,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.graph_objs._figure import Figure as plotlyFigure
 from plotly.subplots import make_subplots
+import stickleback.util as sb_util
+
 from stickleback.types import *
 from typing import Dict, Tuple, Union
+
+from pdb import set_trace
 
 figure_T = Union[plotlyFigure, matplotlibFigure]
 
@@ -169,12 +173,37 @@ def __plot_predictions_static(data, predicted, actual) -> matplotlibFigure:
 
     return fig
 
-
-def outcome_table(outcomes: Dict[str, pd.Series]) -> pd.DataFrame:
+def outcome_table(outcomes: Dict[str, pd.Series],
+                  sensors: sensors_T) -> pd.DataFrame:
     def add_deployid(d, o):
         result = pd.DataFrame(o)
         result.insert(0, "deployid", np.full(len(o), [d]))
         return result
 
     counts = pd.concat([add_deployid(d, o) for d, o in outcomes.items()])
-    return counts.groupby(["deployid", "outcome"]).size().unstack(fill_value=0)
+    result = (counts
+              .groupby(["deployid", "outcome"])
+              .size()
+              .unstack(fill_value=0))
+    
+    result["F1"] = sb_util.f1(result["TP"], result["FP"], result["FN"])
+    
+    dur_dict = {k: (v.index[-1] - v.index[0]) / pd.Timedelta(hours=1) 
+                for k, v in sensors.items()}
+    durations = pd.DataFrame.from_dict(dur_dict, "index")
+    durations.columns = ["Duration (hours)"]
+    result = result.join(durations)
+    
+    true_rate = (result["TP"] + result["FN"]) / result["Duration (hours)"]
+    result["True rate (events/hr)"] = true_rate
+    pred_rate = (result["TP"] + result["FP"]) / result["Duration (hours)"]
+    result["Pred. rate (events/hr)"] = pred_rate
+    
+    result = result[["F1", 
+                     "TP", 
+                     "FP", 
+                     "FN", 
+                     "True rate (events/hr)",
+                     "Pred. rate (events/hr)",
+                     "Duration (hours)"]]
+    return result
