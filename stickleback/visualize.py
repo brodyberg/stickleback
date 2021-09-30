@@ -122,8 +122,6 @@ def __plot_predictions_interactive(data: pd.DataFrame,
                 marker_size=10,
                 marker_color=actual_color,
             ), row=i + 1, col=1)
-        if col == "depth":
-            fig.update_yaxes(autorange="reversed", row=i + 1, col=1)
         fig.update_yaxes(title_text=col, row=i + 1, col=1)
         
     fig.update_layout(showlegend=False)
