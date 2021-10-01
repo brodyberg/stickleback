@@ -19,6 +19,7 @@ A Python package for finding *point behaviors* in longitudinal sensor data.
 - Run `pip install stickleback`
 - Run `pip install black`
 - Run `pip install pytest`
+- Run `pip install pytest-cov`
 
 Developer inner-loop: 
 

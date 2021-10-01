@@ -7,3 +7,4 @@ stickleback.egg-info*
 stickleback/__pycache__*
 build/
 node_modules/
+.coverage
