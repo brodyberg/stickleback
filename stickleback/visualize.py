@@ -1,19 +1,18 @@
-from matplotlib.figure import Figure as matplotlibFigure
+from pdb import set_trace
+from typing import Dict, Tuple, Union
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from matplotlib.figure import Figure as matplotlibFigure
 from plotly.graph_objs._figure import Figure as plotlyFigure
 from plotly.subplots import make_subplots
+
 import stickleback.util as sb_util
-
 from stickleback.types import *
-from typing import Dict, Tuple, Union
-
-from pdb import set_trace
 
 figure_T = Union[plotlyFigure, matplotlibFigure]
-
 
 def plot_sensors_events(
     deployid: str, sensors: sensors_T, events: events_T, interactive=True

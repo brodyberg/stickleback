@@ -11,18 +11,18 @@ from typing import Dict, Tuple
 from pdb import set_trace
 
 
-class Stickleback:
+class xStickleback:
     def __init__(
         self,
-        local_clf,
+        # local_clf, # local estimator
         win_size: int,
         tol: pd.Timedelta,
         nth: int = 1,
         n_folds: int = 5,
         max_events: int = None,
     ) -> None:
-        self.local_clf = local_clf
-        self.__local_clf2 = sklearn.clone(local_clf)
+        # self.local_clf = local_clf
+        # self.__local_clf2 = sklearn.clone(local_clf)
         self.prominence = None
         self.win_size = win_size
         self.tol = tol
@@ -52,11 +52,11 @@ class Stickleback:
             sensors, training_events, self.win_size, mask
         )
         nonevent_X = pd.concat(nonevents_nested.values())
-        local_X = event_X.append(nonevent_X)
+        # local_X = event_X.append(nonevent_X)
         event_y = np.full(len(event_X), 1.0)
         nonevent_y = np.full(len(nonevent_X), 0.0)
-        local_y = np.concatenate([event_y, nonevent_y])
-        self._fit_local(local_X, local_y)
+        # local_y = np.concatenate([event_y, nonevent_y])
+        # self._fit_local(local_X, local_y)
 
         # Global step (using internal cross validation)
         local_proba_cv = self._fit_global(
@@ -114,8 +114,8 @@ class Stickleback:
         if len(local_X.columns) > 1:
             local_X = convert.from_nested_to_3d_numpy(local_X)
 
-        clf = self.__local_clf2 if clone else self.local_clf
-        clf.fit(local_X, local_y)
+        # clf = self.__local_clf2 if clone else self.local_clf
+        # clf.fit(local_X, local_y)
 
     def _predict_local(
         self, sensors: sensors_T, mask: mask_T = None, clone: bool = False

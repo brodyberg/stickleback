@@ -3,16 +3,31 @@
   "version": "1.0.0",
   "description": "A Python package for finding *point behaviors* in longitudinal sensor data.",
   "main": "index.js",
+  "dependencies": {
+    "husky",
+    ""
+    "foo": "1.0.0 - 2.9999.9999",
+    "bar": ">=1.0.2 <2.1.2",
+    "baz": ">1.0.2 <=2.3.4",
+    "boo": "2.0.1",
+    "qux": "<1.0.0 || >=2.3.1 <2.4.5 || >=2.5.2 <3.0.0",
+    "asd": "http://asdf.com/asdf.tar.gz",
+    "til": "~1.2",
+    "elf": "~1.2.3",
+    "two": "2.x",
+    "thr": "3.3.x",
+    "lat": "latest",
+    "dyl": "file:../dyl"
+  },
   "directories": {
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky install"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/brodyberg/stickleback.git"
+    "url": "git+https://github.com/FlukeAndFeather/stickleback.git"
   },
   "keywords": [
     "longitudinal",
@@ -24,8 +39,5 @@
   "bugs": {
     "url": "https://github.com/brodyberg/stickleback/issues"
   },
-  "homepage": "https://github.com/brodyberg/stickleback#readme",
-  "devDependencies": {
-    "husky": "^7.0.0"
-  }
+  "homepage": "https://github.com/brodyberg/stickleback#readme"
 }

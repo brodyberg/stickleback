@@ -1,5 +1,5 @@
+import stickleback
 from setuptools import setup, find_packages
-
 
 setup(
     name="stickleback",
@@ -19,4 +19,5 @@ setup(
         "sklearn",
         "black",
     ],
+    version=stickleback.__version__
 )

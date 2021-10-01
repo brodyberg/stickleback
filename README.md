@@ -15,30 +15,33 @@ A Python package for finding *point behaviors* in longitudinal sensor data.
 - Install Node modules: `yarn install`
 - Install [VS Code](https://code.visualstudio.com/download)
 - Install [Python VS Code extension](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
-- Run `python3 -m pip install scikit-learn`
-- Run `python3 -m pip install plotly`
-- Run `python3 -m pip install scipy`
-- Run `python3 -m pip install matplotlib`
-- Run `python3 -m pip install jupyter`
-- Run `python3 -m pip install netcdf4`
-- Run `python3 -m pip install pandas`
-- Run `python3 -m pip install sktime`
-- Run `python3 -m pip install sklearn`
+- Run `pip install bumpversion`
+- Run `pip install stickleback`
 - Run `pip install black`
 
+Developer inner-loop: 
 
+1. Open `jupyter/README.ipynb`
+1. Run cells
+1. Modify `stickleback/stickleback.py` and other files
+1. Change the version number in `stickleback/__init__.py`
+1. `python3 setup.py sdist bdist_wheel`
+1. `pip install --upgrade --force-reinstall stickleback`
+
+Note version "0.0.0" below rather than desired upgrade: "0.0.2":
+```
+$ pip install --upgrade stickleback
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: stickleback in /Users/brodyberg/Library/Python/3.8/lib/python/site-packages/stickleback-0.0.0-py3.8.egg (0.0.0)
+```
+And force upgrade looks at egg, not wheel: 
 
 ```
-ModuleNotFoundError                       Traceback (most recent call last)
-/var/folders/23/f9jzgvns2378jgmdt5v42sj00000gn/T/ipykernel_30962/3191659921.py in <module>
-      2 import numpy as np
-      3 import pandas as pd
-----> 4 from stickleback.stickleback import Stickleback
-      5 plt.rcParams['figure.figsize'] = [12, 8]
-
-ModuleNotFoundError: No module named 'stickleback'
+$ pip install --upgrade --force-reinstall stickleback
+Defaulting to user installation because normal site-packages is not writeable
+ERROR: Could not find a version that satisfies the requirement stickleback (from versions: none)
+ERROR: No matching distribution found for stickleback
 ```
-
 
 ---
 
